@@ -32,6 +32,7 @@ private:
     Ptr<ASTNode> parsePrimary();
     Ptr<ASTNode> parseIfStatement();
     Ptr<ASTNode> parseWhileStatement();
+    Ptr<ASTNode> parseForStatement();
     Ptr<ASTNode> parseReturnStatement();
     
     Token consume(TokenType type, StringRef message);

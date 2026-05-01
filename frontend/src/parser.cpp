@@ -119,6 +119,7 @@ Ptr<ASTNode> Parser::parseCompoundStatement() {
 Ptr<ASTNode> Parser::parseStatement() {
     if (match(TokenType::KW_IF)) return parseIfStatement();
     if (match(TokenType::KW_WHILE)) return parseWhileStatement();
+    if (match(TokenType::KW_FOR)) return parseForStatement();
     if (match(TokenType::KW_RETURN)) return parseReturnStatement();
     if (match(TokenType::LBRACE)) return parseCompoundStatement();
     
@@ -251,6 +252,39 @@ Ptr<ASTNode> Parser::parseWhileStatement() {
     
     return std::make_shared<WhileStatement>(std::dynamic_pointer_cast<Expression>(cond), 
                                              std::dynamic_pointer_cast<Statement>(body));
+}
+
+Ptr<ASTNode> Parser::parseForStatement() {
+    consume(TokenType::LPAREN, "Expect '(' after 'for'");
+    
+    Ptr<Declaration> init = nullptr;
+    if (match(TokenType::KW_INT) || match(TokenType::KW_FLOAT) || match(TokenType::KW_VOID)) {
+        Token type_token = previous();
+        Token name_token = consume(TokenType::IDENTIFIER, "Expect identifier after type");
+        init = std::dynamic_pointer_cast<Declaration>(parseVariableDeclaration(type_token, name_token));
+    } else if (!check(TokenType::SEMICOLON)) {
+        auto expr = parseExpression();
+        consume(TokenType::SEMICOLON, "Expect ';' after for initializer");
+        init = std::dynamic_pointer_cast<Declaration>(expr);
+    } else {
+        advance();
+    }
+    
+    Ptr<Expression> cond = nullptr;
+    if (!check(TokenType::SEMICOLON)) {
+        cond = std::dynamic_pointer_cast<Expression>(parseExpression());
+    }
+    consume(TokenType::SEMICOLON, "Expect ';' after for condition");
+    
+    Ptr<Expression> inc = nullptr;
+    if (!check(TokenType::RPAREN)) {
+        inc = std::dynamic_pointer_cast<Expression>(parseExpression());
+    }
+    consume(TokenType::RPAREN, "Expect ')' after for increment");
+    
+    auto body = parseStatement();
+    
+    return std::make_shared<ForStatement>(init, cond, inc, std::dynamic_pointer_cast<Statement>(body));
 }
 
 Ptr<ASTNode> Parser::parseReturnStatement() {

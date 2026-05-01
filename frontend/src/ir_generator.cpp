@@ -85,7 +85,24 @@ String IRGenerator::generate_expression(Ptr<Expression> expr) {
         }
         
         if (op == "store") {
-            current_block_.push_back(result + " = store " + left + ", " + right);
+            // For store: left must be an alloca address (not loaded), right is the value
+            String left_addr;
+            auto left_ident = std::dynamic_pointer_cast<IdentifierExpression>(bin->getLeft());
+            if (left_ident) {
+                String name = left_ident->getName();
+                bool is_alloca = false;
+                for (const auto& a : alloca_vars_) {
+                    if (a == name) { is_alloca = true; break; }
+                }
+                if (is_alloca) {
+                    left_addr = "%" + name;
+                } else {
+                    left_addr = left;
+                }
+            } else {
+                left_addr = left;
+            }
+            current_block_.push_back("store i64 " + right + ", ptr " + left_addr);
         } else if (op.substr(0, 4) == "icmp") {
             current_block_.push_back(result + " = " + op + " i64 " + left + ", " + right);
         } else {
@@ -194,6 +211,41 @@ void IRGenerator::generate_statement(Ptr<ASTNode> stmt) {
         
         current_block_.push_back(body_label + ":");
         generate_statement(while_stmt->getBody());
+        current_block_.push_back("br label " + cond_label);
+        
+        current_block_.push_back(end_label + ":");
+        return;
+    }
+    
+    auto for_stmt = std::dynamic_pointer_cast<ForStatement>(stmt);
+    if (for_stmt) {
+        String cond_label = new_temp();
+        String body_label = new_temp();
+        String inc_label = new_temp();
+        String end_label = new_temp();
+        
+        if (for_stmt->getInit()) {
+            generate_statement(for_stmt->getInit());
+        }
+        
+        current_block_.push_back("br label " + cond_label);
+        current_block_.push_back(cond_label + ":");
+        
+        if (for_stmt->getCondition()) {
+            String cond = generate_expression(for_stmt->getCondition());
+            current_block_.push_back("br i1 " + cond + ", label " + body_label + ", label " + end_label);
+        } else {
+            current_block_.push_back("br label " + body_label);
+        }
+        
+        current_block_.push_back(body_label + ":");
+        generate_statement(for_stmt->getBody());
+        current_block_.push_back("br label " + inc_label);
+        
+        current_block_.push_back(inc_label + ":");
+        if (for_stmt->getIncrement()) {
+            generate_expression(for_stmt->getIncrement());
+        }
         current_block_.push_back("br label " + cond_label);
         
         current_block_.push_back(end_label + ":");
