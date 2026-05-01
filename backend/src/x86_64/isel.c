@@ -105,14 +105,42 @@ static const char* scratch_reg(int idx) {
     return "rax";
 }
 
+/* MASM reserved words that conflict with function names */
+static const char* masm_reserved[] = {
+    "add", "sub", "mul", "div", "and", "or", "xor", "not", "neg",
+    "inc", "dec", "shl", "shr", "sar", "rol", "ror", "rcl", "rcr",
+    "test", "cmp", "mov", "lea", "push", "pop", "call", "ret",
+    "jmp", "je", "jne", "jg", "jge", "jl", "jle", "ja", "jae", "jb", "jbe",
+    "sete", "setne", "setg", "setge", "setl", "setle",
+    "loop", "enter", "leave", "nop", "int", "iret",
+    NULL
+};
+
+static int is_masm_reserved(const char* name) {
+    for (int i = 0; masm_reserved[i]; i++) {
+        if (strcmp(masm_reserved[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+static const char* safe_name(const char* name) {
+    static char buf[256];
+    if (is_masm_reserved(name)) {
+        snprintf(buf, sizeof(buf), "_%s", name);
+        return buf;
+    }
+    return name;
+}
+
 /* Translate a single IR function to x86_64 assembly */
 static void translate_function(FILE* out, const ccvm_ir_func_t* func, reg_alloc_t* ra) {
+    const char* fname = safe_name(func->name);
     ra->local_count = 0;
     ra->stack_ptr = 0;
 
     /* Prologue */
     emit(out, "");
-    emit(out, "%s PROC", func->name);
+    emit(out, "%s PROC", fname);
     emit(out, "    push rbp");
     emit(out, "    mov rbp, rsp");
 
@@ -376,7 +404,7 @@ static void translate_function(FILE* out, const ccvm_ir_func_t* func, reg_alloc_
                     if (instr->arg_count > 6) {
                         emit(out, "    sub rsp, %d", (instr->arg_count - 6) * 8);
                     }
-                    emit(out, "    call %s", instr->func_name);
+                    emit(out, "    call %s", safe_name(instr->func_name));
                     if (instr->arg_count > 6) {
                         emit(out, "    add rsp, %d", (instr->arg_count - 6) * 8);
                     }
@@ -412,7 +440,7 @@ static void translate_function(FILE* out, const ccvm_ir_func_t* func, reg_alloc_
             emit(out, "    ret");
         }
     }
-    emit(out, "%s ENDP", func->name);
+    emit(out, "%s ENDP", fname);
 }
 
 static void emit_end(FILE* out) {
@@ -465,7 +493,7 @@ int ccvm_x86_64_generate(const ccvm_ir_module_t* module, const char* output_file
                         if (strcmp(seen_funcs[s], fname) == 0) { found = 1; break; }
                     }
                     if (!found) {
-                        fprintf(out, "extrn %s: PROC\n", fname);
+                        fprintf(out, "extrn %s: PROC\n", safe_name(fname));
                         if (seen_count < CCVM_IR_MAX_FUNCS) {
                             strncpy(seen_funcs[seen_count++], fname, CCVM_IR_MAX_NAME - 1);
                         }
