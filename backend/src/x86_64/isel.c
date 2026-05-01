@@ -145,10 +145,19 @@ static void translate_function(FILE* out, const ccvm_ir_func_t* func, reg_alloc_
     emit(out, "    mov rbp, rsp");
 
     /* First pass: allocate all stack slots (params, allocas, and temps) */
-    /* Register params as stack slots at positive offsets */
+    /* Register params (0-3) at [rbp+16], [rbp+24], [rbp+32], [rbp+40] */
+    /* Stack params (4+) at [rbp+48], [rbp+56], [rbp+64], [rbp+72] */
     static const char* param_regs[] = {"rcx", "rdx", "r8", "r9"};
     for (int p = 0; p < func->param_count && p < 4; p++) {
         alloc_param(ra, func->params[p].name, p);
+    }
+    for (int p = 4; p < func->param_count; p++) {
+        int offset = 48 + (p - 4) * 8;
+        if (ra->local_count < 512) {
+            strncpy(ra->locals[ra->local_count].var_name, func->params[p].name, CCVM_IR_MAX_NAME - 1);
+            ra->locals[ra->local_count].offset = offset;
+        }
+        ra->local_count++;
     }
 
     /* Register alloca variables and pre-allocate temps from all instructions */
@@ -391,27 +400,54 @@ static void translate_function(FILE* out, const ccvm_ir_func_t* func, reg_alloc_
                 }
                 case CCVM_IR_CALL: {
                     /* Windows x64 calling convention: first 4 args in rcx, rdx, r8, r9 */
+                    /* Args 5+ on stack. Shadow space (32 bytes) always reserved. */
                     static const char* arg_regs[] = {"rcx", "rdx", "r8", "r9"};
-                    for (int a = 0; a < instr->arg_count && a < 4; a++) {
+                    int stack_args = instr->arg_count > 4 ? instr->arg_count - 4 : 0;
+                    int shadow = 32;
+                    int total_stack = shadow + stack_args * 8;
+                    
+                    if (total_stack > 0) {
+                        emit(out, "    sub rsp, %d", total_stack);
+                    }
+                    
+                    for (int a = 0; a < instr->arg_count; a++) {
                         const ccvm_ir_operand_t* arg = &instr->args[a];
-                        if (arg->kind == CCVM_IR_OP_IMM) {
-                            emit(out, "    mov %s, %lld", arg_regs[a], arg->imm);
+                        if (a < 4) {
+                            if (arg->kind == CCVM_IR_OP_IMM) {
+                                emit(out, "    mov %s, %lld", arg_regs[a], arg->imm);
+                            } else {
+                                int off = alloc_local(ra, arg->mem);
+                                emit(out, "    mov %s, [rbp+%d]", arg_regs[a], off);
+                            }
                         } else {
-                            int off = alloc_local(ra, arg->mem);
-                            emit(out, "    mov %s, [rbp+%d]", arg_regs[a], off);
+                            int stack_off = 32 + (a - 4) * 8;
+                            if (arg->kind == CCVM_IR_OP_IMM) {
+                                emit(out, "    mov rax, %lld", arg->imm);
+                                emit(out, "    mov [rsp+%d], rax", stack_off);
+                            } else {
+                                int off = alloc_local(ra, arg->mem);
+                                emit(out, "    mov rax, [rbp+%d]", off);
+                                emit(out, "    mov [rsp+%d], rax", stack_off);
+                            }
                         }
                     }
-                    if (instr->arg_count > 6) {
-                        emit(out, "    sub rsp, %d", (instr->arg_count - 6) * 8);
-                    }
                     emit(out, "    call %s", safe_name(instr->func_name));
-                    if (instr->arg_count > 6) {
-                        emit(out, "    add rsp, %d", (instr->arg_count - 6) * 8);
+                    if (total_stack > 0) {
+                        emit(out, "    add rsp, %d", total_stack);
                     }
                     if (instr->result[0] != '\0') {
                         int off_res = alloc_local(ra, instr->result);
                         emit(out, "    mov [rbp+%d], rax", off_res);
                     }
+                    break;
+                }
+                case CCVM_IR_GEP: {
+                    /* Load address of string constant */
+                    const char* sname = instr->op1.mem;
+                    if (sname[0] == '.') sname++;
+                    int off_res = alloc_local(ra, instr->result);
+                    emit(out, "    lea rax, %s", sname);
+                    emit(out, "    mov [rbp+%d], rax", off_res);
                     break;
                 }
                 case CCVM_IR_LABEL:
@@ -463,6 +499,50 @@ int ccvm_x86_64_generate(const ccvm_ir_module_t* module, const char* output_file
     /* Header */
     fprintf(out, "; CCVM x86_64 Assembly Output\n");
     fprintf(out, "; Generated from: %s\n\n", module->module_name);
+
+    /* Data section for string constants */
+    if (module->string_count > 0) {
+        fprintf(out, ".data\n\n");
+        for (int si = 0; si < module->string_count; si++) {
+            const ccvm_ir_string_t* str = &module->strings[si];
+            const char* sname = str->name;
+            if (sname[0] == '.') sname++;
+            fprintf(out, "%s db ", sname);
+            /* Process escape sequences and write bytes */
+            int first = 1;
+            const char* p = str->value;
+            while (*p) {
+                unsigned char ch;
+                if (*p == '\\' && p[1]) {
+                    p++;
+                    switch (*p) {
+                        case 'n': ch = '\n'; break;
+                        case 't': ch = '\t'; break;
+                        case 'r': ch = '\r'; break;
+                        case '0': ch = 0; while (p[1] >= '0' && p[1] <= '9') p++; break;
+                        case '\\': ch = '\\'; break;
+                        case '"': ch = '"'; break;
+                        default: ch = *p; break;
+                    }
+                } else {
+                    ch = (unsigned char)*p;
+                }
+                if (!first) fprintf(out, ", ");
+                if (ch == 0) {
+                    fprintf(out, "0");
+                } else if (ch >= 32 && ch < 127) {
+                    fprintf(out, "'%c'", ch);
+                } else {
+                    fprintf(out, "%d", ch);
+                }
+                first = 0;
+                p++;
+            }
+            fprintf(out, "\n");
+        }
+        fprintf(out, "\n");
+    }
+
     fprintf(out, ".code\n\n");
 
     /* External declarations - deduplicated, exclude functions defined in this module */

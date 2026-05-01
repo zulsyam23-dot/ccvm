@@ -43,6 +43,7 @@ static ccvm_ir_opcode_t parse_opcode(const char* s) {
     if (strcmp(s, "call") == 0) return CCVM_IR_CALL;
     if (strcmp(s, "br") == 0) return CCVM_IR_BR;
     if (strcmp(s, "ret") == 0) return CCVM_IR_RET;
+    if (strcmp(s, "gep") == 0) return CCVM_IR_GEP;
     return CCVM_IR_NOP;
 }
 
@@ -104,6 +105,37 @@ int ccvm_ir_parse(const char* filename, ccvm_ir_module_t* module) {
 
         /* Skip closing brace */
         if (l[0] == '}') continue;
+
+        /* Global string: global @.strN = constant [N x i8] c"..." */
+        if (strncmp(l, "global @", 8) == 0) {
+            if (module->string_count < CCVM_IR_MAX_STRINGS) {
+                ccvm_ir_string_t* str = &module->strings[module->string_count];
+                char* name_start = l + 8;
+                char* eq = strchr(name_start, '=');
+                if (eq) {
+                    *eq = '\0';
+                    strncpy(str->name, trim(name_start), CCVM_IR_MAX_NAME - 1);
+                    /* Parse value: constant [N x i8] c"..." */
+                    char* cq = strchr(eq + 1, 'c');
+                    if (cq) {
+                        cq = strchr(cq, '"');
+                        if (cq) {
+                            cq++;
+                            char* end = cq;
+                            while (*end && !(end[0] == '"' && end[-1] != '\\')) end++;
+                            int vlen = (int)(end - cq);
+                            if (vlen < CCVM_IR_MAX_STR_LEN) {
+                                strncpy(str->value, cq, vlen);
+                                str->value[vlen] = '\0';
+                                str->length = vlen + 1;
+                            }
+                        }
+                    }
+                    module->string_count++;
+                }
+            }
+            continue;
+        }
 
         /* Function declaration: func name(params) -> ret { */
         if (strncmp(l, "func ", 5) == 0) {
@@ -283,6 +315,22 @@ int ccvm_ir_parse(const char* filename, ccvm_ir_module_t* module) {
                         char* op2_str = comma + 1;
                         while (*op2_str == ' ') op2_str++;
                         instr->op2 = parse_operand_str(op2_str);
+                    }
+                    break;
+                }
+                case CCVM_IR_GEP: {
+                    /* i8, ptr @.strN - get string constant address */
+                    char* at = strchr(args, '@');
+                    if (at) {
+                        at++;
+                        char* end = at;
+                        while (*end && *end != ' ' && *end != '\n' && *end != '\r') end++;
+                        int nlen = (int)(end - at);
+                        if (nlen < CCVM_IR_MAX_NAME) {
+                            strncpy(instr->op1.mem, at, nlen);
+                            instr->op1.mem[nlen] = '\0';
+                        }
+                        instr->op1.kind = CCVM_IR_OP_MEM;
                     }
                     break;
                 }

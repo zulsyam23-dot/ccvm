@@ -15,11 +15,13 @@
 extern "C" {
 #endif
 
-#define CCVM_IR_MAX_PARAMS 4
-#define CCVM_IR_MAX_BLOCKS 8
-#define CCVM_IR_MAX_INSTRS 64
-#define CCVM_IR_MAX_NAME 32
-#define CCVM_IR_MAX_FUNCS 8
+#define CCVM_IR_MAX_PARAMS 8
+#define CCVM_IR_MAX_BLOCKS 32
+#define CCVM_IR_MAX_INSTRS 256
+#define CCVM_IR_MAX_NAME 64
+#define CCVM_IR_MAX_FUNCS 16
+#define CCVM_IR_MAX_STRINGS 32
+#define CCVM_IR_MAX_STR_LEN 256
 
 typedef enum {
     CCVM_IR_NOP,
@@ -51,7 +53,8 @@ typedef enum {
     CCVM_IR_LABEL,
     CCVM_IR_SEXT,
     CCVM_IR_ZEXT,
-    CCVM_IR_TRUNC
+    CCVM_IR_TRUNC,
+    CCVM_IR_GEP
 } ccvm_ir_opcode_t;
 
 typedef enum {
@@ -113,9 +116,17 @@ typedef struct {
 } ccvm_ir_func_t;
 
 typedef struct {
+    char name[CCVM_IR_MAX_NAME];
+    char value[CCVM_IR_MAX_STR_LEN];
+    int length;
+} ccvm_ir_string_t;
+
+typedef struct {
     char module_name[CCVM_IR_MAX_NAME];
     ccvm_ir_func_t funcs[CCVM_IR_MAX_FUNCS];
     int func_count;
+    ccvm_ir_string_t strings[CCVM_IR_MAX_STRINGS];
+    int string_count;
 } ccvm_ir_module_t;
 
 #ifdef __cplusplus

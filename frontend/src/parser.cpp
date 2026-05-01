@@ -225,6 +225,10 @@ Ptr<ASTNode> Parser::parsePrimary() {
         return expr;
     }
     
+    if (match(TokenType::STRING_LITERAL)) {
+        return std::make_shared<StringLiteral>(previous().raw_text());
+    }
+    
     throw ParserError("Expected expression");
 }
 

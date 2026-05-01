@@ -24,6 +24,11 @@ struct IRModule {
     String module_name;
     Vector<IRFunction> functions;
     Vector<String> globals;
+    struct StringConstant {
+        String name;
+        String value;
+    };
+    Vector<StringConstant> strings;
     
     String to_string() const;
 };
@@ -32,6 +37,7 @@ class IRGenerator {
 private:
     IRModule module_;
     int temp_counter_;
+    int str_counter_;
     String current_function_;
     Vector<String> current_block_;
     Vector<String> alloca_vars_;
@@ -44,7 +50,7 @@ private:
     void generate_variable_decl(Ptr<VariableDeclaration> decl);
     
 public:
-    IRGenerator() : temp_counter_(0) {}
+    IRGenerator() : temp_counter_(0), str_counter_(0) {}
     
     void generate(ASTNode& node);
     String get_ir() const;
