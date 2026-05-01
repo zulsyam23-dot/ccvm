@@ -1,0 +1,16 @@
+name = "CCVMBenchmarks"
+uuid = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
+authors = ["CCVM Team <team@ccvm.dev>"]
+version = "0.1.0"
+
+[deps]
+BenchmarkTools = "6e4b46f1-a9f2-53c2-a740-1594e9636605"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+CSV = "336ed68f-0bac-5ca0-87d4-7b163a0d0791"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+JSON3 = "0f10b21a-121b-43d6-a241-11d04494f4d2"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+
+[compat]
+julia = "1.6"

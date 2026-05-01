@@ -1,0 +1,27 @@
+# Build artifacts
+build/
+*.obj
+*.exe
+*.asm
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# Rust target directories
+**/target/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.vs/
+*.suo
+*.user
+
+# Temporary files
+*.tmp
+*.log

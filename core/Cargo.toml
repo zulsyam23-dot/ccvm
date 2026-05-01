@@ -1,0 +1,35 @@
+[package]
+name = "ccvm-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["CCVM Team <team@ccvm.dev>"]
+description = "Core library for CCVM (Cross-Compiler Virtual Machine)"
+license = "MIT"
+repository = "https://github.com/ccvm/ccvm"
+keywords = ["compiler", "vm", "ir", "type-system"]
+categories = ["compilers", "development-tools"]
+
+[dependencies]
+thiserror = "1.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+indexmap = "2.0"
+petgraph = "0.6"
+dashmap = "5.5"
+parking_lot = "0.12"
+tracing = "0.1"
+
+[dev-dependencies]
+proptest = "1.4"
+criterion = "0.5"
+pretty_assertions = "1.4"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.dev]
+debug = true
+opt-level = 0
